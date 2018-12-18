@@ -6,14 +6,17 @@ class Unit(object):
     command_name = "unit"
     unit_type = ""  # the building the unit can be build in
     emoji = ""  # the emoji for reactions
+    # an attack against a target the unit is strong again will be multiplied with this value
+    strength_damage_multiplier = 1.1
     strengths = []  # a list of the names of units this one is strong against
     price_list = {}  # the price per level
     damage_list = {}  # the damage per level
+    health_list = {}  # the health per level
     speed_list = {}  # the speed per level
     time_list = {}  # the time it takes to build the unit per level
     requirements_list = {}  # the requirements list. a unit needs requirements for EVERY level
 
-    def __init__(self, level):
+    def __init__(self, level=1):
         if level in self.price_list.keys():  # check that this unit has the level
             self.level = level
         else:
@@ -50,6 +53,14 @@ class Unit(object):
         else:
             # find the highest level below the current level
             return self.last_level_items(self.time_list)
+
+    @property
+    def health(self):
+        if self.level in self.health_list:
+            return self.health_list[self.level]
+        else:
+            # find the highest level below the current level
+            return self.last_level_items(self.health_list)
 
     @property
     def requirements(self):
@@ -89,6 +100,9 @@ class Soldier(Unit):
     damage_list = {
         1: 5,
     }
+    health_list = {
+        1: 10,
+    }
     speed_list = {
         1: 5,
     }
@@ -117,6 +131,9 @@ class Archer(Unit):
     }
     damage_list = {
         1: 10,
+    }
+    health_list = {
+        1: 7,
     }
     speed_list = {
         1: 5,
@@ -147,6 +164,9 @@ class Cavalry(Unit):
     damage_list = {
         1: 20,
     }
+    health_list = {
+        1: 20,
+    }
     speed_list = {
         1: 25,
     }
@@ -166,6 +186,7 @@ class Trebuchet(Unit):
     strengths = ["citywall"]
     unit_type = "workshop"
     emoji = "⚙"
+    strength_damage_multiplier = 4  # only effective against buildings
     price_list = {
         1: {
             "candy": 500,
@@ -176,6 +197,9 @@ class Trebuchet(Unit):
     }
     damage_list = {
         1: 10,
+    }
+    health_list = {
+        1: 50,
     }
     speed_list = {
         1: 1,
