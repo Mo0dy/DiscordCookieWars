@@ -1,0 +1,72 @@
+import discord
+import asyncio
+
+
+class Menupoint(object):
+    def __init__(self, name, func, submenu=False):
+        self.name = name
+        self.func = func
+        self.submenu = submenu  # if it is a submenu it will be passed the menu object
+
+
+class Menu(object):
+    def __init__(self, client, channel, user):
+        self.user = user
+        self.client = client
+        self.channel = channel
+        self.timeout = 60
+
+        # a dictionary connecting emojis with menupoints
+        self.current_menu = {}
+
+    async def start(self):
+        m, r = await self.write_menu()
+        asyncio.sleep(1)
+        while True:
+            if not r:
+                r, _ = await self.client.wait_for_reaction(user=self.user, timeout=self.timeout, message=m)
+            await self.client.delete_message(m)
+            if not r:
+                # timeout
+                break
+            # change menu according to reaction
+            if r.emoji in self.current_menu.keys():
+                m_point = self.current_menu[r.emoji]
+                if m_point.submenu:  # call func with this menu as argument
+                    m_point.func(self)
+                else:
+                    await m_point.func()
+
+            m, r = await self.write_menu()
+        return
+
+    async def write_menu(self):
+        """printes the menu and returns the message"""
+        lines = ["======================================="]
+        for e, m_point in self.current_menu.items():
+            lines.append("{:<4}: {:<20}".format(e, m_point.name))
+        lines.append("=======================================")
+        message = await self.client.send_message(self.channel, "menu\n%s" % "\n".join(lines))
+
+        for e in self.current_menu.keys():
+            await self.client.add_reaction(message, e)
+            updated_message = await self.client.get_message(message.channel, message.id)
+            for r in updated_message.reactions:
+                if self.user in await self.client.get_reaction_users(r):
+                    return message, r
+        return message, None
+
+    def get_command_wrapper(self, function, mentions=(), parameters=()):
+        async def f():
+            await function(self.user, mentions, self.channel, parameters)
+        return f
+
+    def get_recall_wrapper(self, function, menu_function):
+        """calls first the function then the menu"""
+        async def f():
+            await function()
+            menu_function(self)
+        return f
+
+    def change_menu(self, menu):
+        self.current_menu = menu
