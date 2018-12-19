@@ -1,6 +1,7 @@
 import discord
 import asyncio
 from Bot import Bot
+from CommandHandler import CommandHandler
 
 
 special_command = "?cmd"
@@ -13,12 +14,18 @@ unit_time = 0.3 # 15 * 60
 
 token = open('gluttony.token', 'r').readlines()[0].strip()  # load the bot token
 client = discord.Client()  # create the client class
+c_handler = CommandHandler()  # create a new command handler
+
 
 # a list of all bots. This is used to pass messages the client receives to the bots. there is one bot per server
 # the key is the server id
 bots = {
 
 }
+
+
+def get_unit_time():
+    return unit_time
 
 
 def run_client():
@@ -36,7 +43,7 @@ async def on_ready():
 
     # create one bot per server
     for s in client.servers:
-        bots[s.id] = Bot(client, s.id)
+        bots[s.id] = Bot(client, s.id, get_unit_time)
 
     while True:
         # starts the update loop. this will only return if there is an error
@@ -61,10 +68,11 @@ async def on_message(message):
 
     # if there is no bot on this server create a new bot
     if not server_id in bots.keys():
-        bots[server_id] = Bot(client, server_id)
+        bots[server_id] = Bot(client, server_id, get_unit_time)
 
     # relay the message to the correct bot
-    await bots[server_id].handle_message(message)
+    await c_handler.handle_message(message, bots[server_id])
+    # await bots[server_id].handle_message(message)
 
 
 async def update_loop():

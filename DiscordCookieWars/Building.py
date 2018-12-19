@@ -291,10 +291,14 @@ class Military(Building):
 
     def prep_units(self, unit, amount):
         """add the amount of units to the build prep dict"""
+
+        print("BUILDING PREPPINT UNITS RECIEVED UNIT", unit)
+
         if unit in self.build_prep:
             self.build_prep[unit] += amount
         else:
             self.build_prep[unit] = amount
+        print(self.build_prep)
 
     def total_time(self):
         time = 0
@@ -306,6 +310,7 @@ class Military(Building):
         """returns the total cost of the currently prepared units"""
         cost = {}
         for unit, amount in self.build_prep.items():
+            print(unit, unit.level)
             for resource, r_amount in unit.price.items():
                 if resource in cost.keys():
                     cost[resource] += amount * r_amount

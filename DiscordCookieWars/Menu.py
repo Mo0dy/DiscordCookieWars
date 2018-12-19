@@ -10,11 +10,12 @@ class Menupoint(object):
 
 
 class Menu(object):
-    def __init__(self, client, channel, user):
-        self.user = user
+    def __init__(self, client, channel, author):
+        self.author = author
         self.client = client
         self.channel = channel
         self.timeout = 60
+        self.header = None
 
         # a dictionary connecting emojis with menupoints
         self.current_menu = {}
@@ -24,7 +25,7 @@ class Menu(object):
         asyncio.sleep(1)
         while True:
             if not r:
-                r, _ = await self.client.wait_for_reaction(user=self.user, timeout=self.timeout, message=m)
+                r, _ = await self.client.wait_for_reaction(user=self.author, timeout=self.timeout, message=m)
             await self.client.delete_message(m)
             if not r:
                 # timeout
@@ -43,6 +44,9 @@ class Menu(object):
     async def write_menu(self):
         """printes the menu and returns the message"""
         lines = ["======================================="]
+        if self.header:
+            lines.append(self.header)
+        lines.append("========================")
         for e, m_point in self.current_menu.items():
             lines.append("{:<4}: {:<20}".format(e, m_point.name))
         lines.append("=======================================")
@@ -52,14 +56,14 @@ class Menu(object):
             await self.client.add_reaction(message, e)
             updated_message = await self.client.get_message(message.channel, message.id)
             for r in updated_message.reactions:
-                if self.user in await self.client.get_reaction_users(r):
+                if self.author in await self.client.get_reaction_users(r):
                     return message, r
         return message, None
 
-    def get_command_wrapper(self, function, mentions=(), parameters=()):
-        async def f():
-            await function(self.user, mentions, self.channel, parameters)
-        return f
+    @staticmethod
+    def build_f(f, args):
+        """builds a function that will call f with *args"""
+        return lambda: f(*args)
 
     def get_recall_wrapper(self, function, menu_function):
         """calls first the function then the menu"""

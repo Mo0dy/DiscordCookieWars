@@ -96,23 +96,31 @@ class Soldier(Unit):
             "candy": 10,
             "cottoncandy": 10
         },
+        2: {
+            "candy": 15,
+            "cottoncandy": 10,
+        }
     }
     damage_list = {
-        1: 5,
-    }
-    health_list = {
         1: 10,
     }
+    health_list = {
+        1: 12,
+    }
     speed_list = {
-        1: 5,
+        1: 6,
     }
     requirements_list = {
         1: {
-            "barracks": 1
+            "barracks": 1,
         },
+        2: {
+            "barracks": 2,
+        }
     }
     time_list = {
         1: 1,
+        2: 1,
     }
 
 

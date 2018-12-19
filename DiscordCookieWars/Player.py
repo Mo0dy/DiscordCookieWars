@@ -1,6 +1,35 @@
 import Building
 from Building import buildings_table
 from Process import Process
+from copy import deepcopy
+
+
+class SaveObject(object):
+    """used to extract the 'savable' information from the player"""
+    def __init__(self, player):
+        self.owner = player.owner
+        self.workforce = player.workforce
+        self.storage_capacity = player.storage_capacity
+
+        self.buildings = deepcopy(player.buildings)
+
+        # clear buildthreads to avoid error while saving
+        for b in self.buildings:
+            if issubclass(b.__class__, Building.Military):
+                b.build_threads = []
+
+        self.resources = player.resources
+        self.units = player.units
+
+    def restore(self, player):
+        player.owner = self.owner
+        player.workforce = self.workforce
+        player.storage_capacity = self.storage_capacity
+
+        player.buildings = self.buildings
+        player.resources = self.resources
+        player.units = self.units
+        return player
 
 
 class Player(object):
@@ -36,20 +65,19 @@ class Player(object):
         for b in self.buildings:
             b.update(self)
 
-    async def upgrade(self, building, send_message):
-        b = self.get_building(building)
-        if not b:
-            await send_message("you haven't build %s yet" % building.name)
+    async def upgrade(self, player_b, send_message):
+        if not player_b:
+            await send_message("you haven't build %s yet" % player_b.name)
             return
-        new_level = b.level + 1
+        new_level = player_b.level + 1
         # check if there is information for this level
-        if not b.can_upgrade():
+        if not player_b.can_upgrade():
             await send_message("already max level")
             return
 
-        if await self.can_build(b.next_cost(), b.next_requirements(), send_message):
-            self.use_resources(b.next_cost())
-            await self.new_build(b.next_time(), self.build_upgrade_function(b.upgrade), building.name + " lvl %i" % new_level, send_message, building)
+        if await self.can_build(player_b.next_cost(), player_b.next_requirements(), send_message):
+            self.use_resources(player_b.next_cost())
+            await self.new_build(player_b.next_time(), self.build_upgrade_function(player_b.upgrade), player_b.name + " lvl %i" % new_level, send_message, player_b.__class__)
 
     async def build(self, building, send_message):
         # check if it can be build at all
@@ -106,6 +134,10 @@ class Player(object):
         for b in self.buildings:
             if isinstance(b, building):
                 return b
+
+    def rally_troops(self, unit, amount, send_message):
+        """cally some of your troops to send out for an attack"""
+        pass
 
     # properties ====================================================
 

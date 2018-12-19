@@ -30,6 +30,7 @@ def simulate_fight(p1, p2):
         p1 = {}
         p2 = {}
 
+    # kill of some units of the winner according to the damage the looser made
     while kill_hp > 0:
         # calculate the probability of death for every type of unit
         death_prop = {1/unit.health * amount: unit for unit, amount in winner.items()}
@@ -57,6 +58,8 @@ def adjusted_damage(attacker, amount, target_group):
     # the sum of all units the attacker is strong against
     strong_amount = sum([amount for unit, amount in target_group.items() if unit.command_name in attacker.strengths])
     p_effective = strong_amount / sum(target_group.values())
+    # this formula is derived by assuming all damage is done simultaneously. this means no units can die before making
+    # all their potential damage. It still should be correct in most cases and more then suitable for this use case
     adj_dmg = (p_effective * (attacker.strength_damage_multiplier - 1) + 1) * normal_damage
     return adj_dmg
 
