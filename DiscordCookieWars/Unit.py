@@ -119,8 +119,8 @@ class Soldier(Unit):
         }
     }
     time_list = {
-        1: 1,
-        2: 1,
+        1: 2,
+        2: 2,
     }
 
 
@@ -152,7 +152,7 @@ class Archer(Unit):
         }
     }
     time_list = {
-        1: 1,
+        1: 2,
     }
 
 
@@ -184,7 +184,7 @@ class Cavalry(Unit):
         }
     }
     time_list = {
-        1: 1,
+        1: 3,
     }
 
 
@@ -218,7 +218,7 @@ class Trebuchet(Unit):
         }
     }
     time_list = {
-        1: 1,
+        1: 40,
     }
 
 

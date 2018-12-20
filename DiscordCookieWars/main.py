@@ -9,7 +9,7 @@ special_command = "?cmd"
 
 # seconds per unit of time. The game will update with every unit and every time measurement in game will have to be in
 # multiples of this e.g. a time of 3 would mean 3 * unit_time seconds
-unit_time = 0.3 # 15 * 60
+unit_time = 15 * 60
 
 
 token = open('gluttony.token', 'r').readlines()[0].strip()  # load the bot token
@@ -19,9 +19,7 @@ c_handler = CommandHandler()  # create a new command handler
 
 # a list of all bots. This is used to pass messages the client receives to the bots. there is one bot per server
 # the key is the server id
-bots = {
-
-}
+bots = {}
 
 
 def get_unit_time():
@@ -44,7 +42,6 @@ async def on_ready():
     # create one bot per server
     for s in client.servers:
         bots[s.id] = Bot(client, s.id, get_unit_time)
-
     while True:
         # starts the update loop. this will only return if there is an error
         await update_loop()  # start the update loop

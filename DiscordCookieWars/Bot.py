@@ -2,8 +2,10 @@ import RecourceManager
 import Player
 import os
 import Building
+import Unit
 from Building import buildings_table
 from Unit import units_per_building, units_table
+import discord
 import Menu
 
 
@@ -23,6 +25,7 @@ class Bot(object):
         # this is used for saving and loading information. it is the id of the server this bot is running for
         self.server = server
         self.load_players()
+        self.attack_time = 20  # units of time per attack
 
     async def update(self):
         """gets called about twice a minute and is used for timed events"""
@@ -54,8 +57,7 @@ class Bot(object):
         await menu.start()  # start the menu
 
     async def print_help(self, channel):
-        help_str = """
-        Your goal is to upgrade your hometown and raid your foes for resources (and pleasure).
+        help_str = """Your goal is to upgrade your hometown and raid your foes for resources (and pleasure).
         
         You can upgrade your building to produce more resources, better units and unlock new buildpaths.
         
@@ -73,7 +75,12 @@ class Bot(object):
         
         They are stored in the Storage.
         
-        Most new buildings including your first Barracks will be unlocked by upgrading the Candy Manor. 
+        Most new buildings including your first Barracks will be unlocked by upgrading the Candy Manor.
+        
+        How to attack:
+        1. Navigate to the rally troops menu (main_menu -> military district -> units.
+        2. Select all the troops you want to rally. There are collected at a separate place.
+        3. Send all rallied units for an attack.
         """
         await self.send_message(channel, help_str)
 
@@ -158,7 +165,8 @@ class Bot(object):
         if not started_build:
             await self.send_message(channel, "you don't have enough resources")
         else:
-            await self.send_message(channel, "you started the prepepd build")
+            await self.send_message(channel, "you started the prepped build")
+            player_b.clear_build_prep()
 
     async def build(self, author, channel, building):
         """build a new building"""
@@ -175,7 +183,7 @@ class Bot(object):
 
         # ask for the amount if there is none given
         if not amount:
-            amount = await self.ask_amount(author, channel)
+            amount = await self.ask_amount(author, channel, message="how many units do you want to create?")
             if not amount:
                 return
 
@@ -183,12 +191,53 @@ class Bot(object):
         building.prep_units(unit, amount)
         await self.send_message(channel, "your units have been added to the prep queue")
 
-    async def rally_troops(self, author, channel, unit, amount=None):
+    async def clear_prepped_units(self, channel, player_b):
+        player_b.clear_build_prep()
+        await self.send_message(channel, "build prep cleared!")
+
+    async def rally_troops(self, author, channel, player_u, amount=None):
         """collect some of your troops to fight"""
-        pass
+        # check if it really is a player unit
+        if not isinstance(player_u, Unit.Unit):
+            print("ERROR BOT, rally_troops: %s is not instance of Unit" % str(player_u))
+
+        # get amount:
+        if not amount:
+            amount = await self.ask_amount(author, channel, message="How many %ss do you want to rally?" % player_u.name)
+            if not amount:
+                return
+
+        player = self.get_player(author)
+        await player.rally_troops(player_u, amount, self.get_message_func(channel))
+
+    async def clear_rallied(self, author, channel):
+        player = self.get_player(author)
+        player.clear_rallied()
+        await self.send_message(channel, "you cleared your rallied troops")
+
+    async def attack(self, author, channel, target=None):
+        if not target:
+            await self.send_message(channel, "who do you want to attack")
+            answer = await self.client.wait_for_message(timeout=20, author=author, channel=channel, check=lambda x: len(x.mentions) == 1)
+            if not answer:
+                await self.send_message(channel, "Did not understand your answer. Try: @<mention>")
+                return
+            target = answer.mentions[0]
+        if target.id not in self.players:
+            await self.send_message(channel, "target did not join the game yet.")
+        attack_p = self.get_player(author)
+        def_p = self.get_player(target)
+        await attack_p.attack(def_p, "**%s**" % target.name, self.get_message_func(channel), self.attack_time)
+
+    async def print_attacks(self, author, channel):
+        player = self.get_player(author)
+        attacks_list = "\n".join([self.get_process_str(t) for t in player.attack_threads])
+        returns_list = "\n".join([self.get_process_str(t) for t in player.return_threads])
+        await self.send_message(channel, "currently attacking:\n %s\ncurrently returning:\n%s" % (attacks_list, returns_list))
 
     # utility functions ===========================================================
-    def get_resource_str(self, resources, detail=False):
+    @staticmethod
+    def get_resource_str(resources, detail=False):
         emojilist = {
             "gingerbread": "🍫",
             "cottoncandy": "☁",
@@ -206,7 +255,7 @@ class Bot(object):
         return ", ".join(["{}: {}".format(emojilist[r], amount) for r, amount in resources.items()])
 
     def get_process_str(self, process):
-        return "{}: {} left and {}% done".format(process.name, self.get_time_str(process.time), round(process.time / process.total_time * 100))
+        return "{}: {} left and {}% done".format(process.name, self.get_time_str(process.time), round((process.total_time - process.time)/ process.total_time * 100))
 
     def get_time_str(self, time_units):
         """returns a time in real world units rounded appropriately"""
@@ -224,9 +273,9 @@ class Bot(object):
             return "{} {}{}".format(time_str if int(time_str[-1]) else time_str[:-2], t_str, "" if time_str == "1.0" else "s")
         return "0s"
 
-    async def ask_amount(self, author, channel):
+    async def ask_amount(self, author, channel, message="How many do you want?"):
         """asks the author for a positive integer value"""
-        await self.client.send_message(channel, "how many units do you want to create")
+        await self.client.send_message(channel, message)
         answer = await self.client.wait_for_message(timeout=60, author=author, channel=channel, check=lambda x: x.content.isdigit())
         amount = int(answer.content)
         if amount <= 0:
@@ -351,7 +400,12 @@ class Bot(object):
             if issubclass(player_b.__class__, Building.Military):
                 f = self.get_building_menu(player_b)
                 military_menu[player_b.emoji] = Menu.Menupoint(player_b.name, f, submenu=True)
-        military_menu["🎖"] = Menu.Menupoint("units", menu.build_f(self.print_units, (menu.author, menu.channel)))
+        # military_menu["🎖"] = Menu.Menupoint("units", menu.build_f(self.print_units, (menu.author, menu.channel)))
+        military_menu["🎖"] = Menu.Menupoint("units", self.rally_troops_menu, submenu=True)
+        if player.rallied_units:
+            military_menu["➡"] = Menu.Menupoint("start attack", menu.get_recall_wrapper(menu.build_f(self.attack, (menu.author, menu.channel)), self.military_menu))
+        if player.attack_threads or player.return_threads:
+            military_menu["🔜"] = Menu.Menupoint("current attacks", menu.build_f(self.print_attacks, (menu.author, menu.channel)))
         military_menu["⬅"] = Menu.Menupoint("return", self.main_menu, submenu=True)
         menu.header = self.get_resource_str(self.get_player(menu.author).resources, detail=True)
         menu.change_menu(military_menu)
@@ -379,13 +433,27 @@ class Bot(object):
         building_menu = {}
         for u in self.get_buildable_units(menu.author, player_b):
             f = menu.build_f(self.prep_units, (menu.author, menu.channel, player_b, u))
-            building_menu[u.emoji] = Menu.Menupoint(u.name + "\tcost: " + self.get_resource_str(u.price), f)
+            building_menu[u.emoji] = Menu.Menupoint(u.name + "\tcost: " + self.get_resource_str(u.price), menu.get_recall_wrapper(f, self.get_building_menu(player_b)))
         building_menu["🏃"] = Menu.Menupoint("prepped", menu.build_f(self.print_building_prepared, (menu.channel, player_b)))
-        building_menu["👍"] = Menu.Menupoint("start training", menu.build_f(self.start_building_prepped, (menu.author, menu.channel, player_b)))
+        building_menu["👍"] = Menu.Menupoint("start training", menu.get_recall_wrapper(menu.build_f(self.start_building_prepped, (menu.author, menu.channel, player_b)), self.get_building_menu(player_b)))
         building_menu["👷"] = Menu.Menupoint("currently building", menu.build_f(self.print_building_threads, (menu.channel, player_b)))
+        if player_b.build_prep:
+            building_menu["🛑"] = Menu.Menupoint("clear prepped solders", menu.get_recall_wrapper(lambda: player_b.clear_build_prep(), self.get_building_menu(player_b), async=False))
         building_menu["⬅"] = Menu.Menupoint("return", self.military_menu, submenu=True)
         menu.header = self.get_resource_str(self.get_player(menu.author).resources, detail=True)
         menu.change_menu(building_menu)
+
+    def rally_troops_menu(self, menu):
+        m = {}
+        player = self.get_player(menu.author)
+        for u, amount in player.units.items():
+            m[u.emoji] = Menu.Menupoint(u.name + "(%i)\t amount: %i" % (u.level, amount),  menu.get_recall_wrapper(menu.build_f(self.rally_troops, (menu.author, menu.channel, u)), self.rally_troops_menu))
+        if self.get_player(menu.author).rallied_units:
+            m["🛑"] = Menu.Menupoint("clear rallied solders", menu.get_recall_wrapper(menu.build_f(self.clear_rallied, (menu.author, menu.channel)), self.rally_troops_menu))
+        m["⬅"] = Menu.Menupoint("return", self.military_menu, submenu=True)
+        units_list = "\n".join(["{:<10}({:<4}):  lvl {:<10}x{:<2}".format(u.name, u.emoji, u.level, amount) for u, amount in player.rallied_units.items()])
+        menu.header = "What Units to You want to rally for an attack?\n==========\nRallied Troops:\n %s" % units_list
+        menu.change_menu(m)
 
     def get_building_menu(self, player_b):
         """returns a function that will create the correct menu for the building and only need the menu as parameter"""

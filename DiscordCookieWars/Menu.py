@@ -25,7 +25,10 @@ class Menu(object):
         asyncio.sleep(1)
         while True:
             if not r:
-                r, _ = await self.client.wait_for_reaction(user=self.author, timeout=self.timeout, message=m)
+                ret_val = await self.client.wait_for_reaction(user=self.author, timeout=self.timeout, message=m)
+                if not ret_val:
+                    return
+                r, _ = ret_val
             await self.client.delete_message(m)
             if not r:
                 # timeout
@@ -65,11 +68,16 @@ class Menu(object):
         """builds a function that will call f with *args"""
         return lambda: f(*args)
 
-    def get_recall_wrapper(self, function, menu_function):
+    def get_recall_wrapper(self, function, menu_function, async=True):
         """calls first the function then the menu"""
-        async def f():
-            await function()
-            menu_function(self)
+        if async:
+            async def f():
+                await function()
+                menu_function(self)
+        else:
+            async def f():
+                function()
+                menu_function(self)
         return f
 
     def change_menu(self, menu):

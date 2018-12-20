@@ -2,6 +2,7 @@ import Building
 from Building import buildings_table
 from Process import Process
 from copy import deepcopy
+from FightSimulation import attack
 
 
 class SaveObject(object):
@@ -19,7 +20,13 @@ class SaveObject(object):
                 b.build_threads = []
 
         self.resources = player.resources
-        self.units = player.units
+        self.units = deepcopy(player.units)
+        # add rallied units as well
+        for u, n in player.rallied_units.items():
+            if u in self.units.keys():
+                self.units[u] += n
+            else:
+                self.units[u] = n
 
     def restore(self, player):
         player.owner = self.owner
@@ -51,19 +58,54 @@ class Player(object):
             "chocolate": 20,
         }
 
-        self.units = {
-
-        }
+        self.units = {}
+        self.rallied_units = {}
 
         self.build_threads = []
+
+        # all attack actions going on from this player
+        self.attack_threads = []
+        # all returning troop actions going on from this player
+        self.return_threads = []
 
     # functions =============================
     async def update(self):
         self.build_threads = list(filter(lambda x: x.update(), self.build_threads))  # update build_threads and remove finished ones
 
-        print("\nTHREADS: \n%s" % "\n".join([str(t) for t in self.build_threads])) # print build threads
+        print("\nTHREADS: \n%s" % "\n".join([str(t) for t in self.build_threads]))  # print build threads
         for b in self.buildings:
             b.update(self)
+
+        self.attack_threads = list(filter(lambda x: x.update(), self.attack_threads))
+        print("\n attacks:")
+        print("\n".join(str(t) for t in self.attack_threads))
+
+        print("\n returns:")
+        self.return_threads = list(filter(lambda x: x.update(), self.return_threads))
+        print("\n".join(str(t) for t in self.return_threads))
+
+    async def attack(self, target_p, target_name, send_message, time):
+        units_list = "\n".join(["{:<10}({:<4}):  lvl {:<10}x{:<2}".format(u.name, u.emoji, u.level, amount) for u, amount in self.rallied_units.items()])
+        self.attack_threads.append(Process(time, self.build_attack_function(target_p, time), "attack %s" % target_name))
+        await send_message("you send out your troops:\n====================\n%s\n====================\nagainst %s" % (units_list, target_name))
+
+    def build_attack_function(self, target_p, time):
+        u = deepcopy(self.rallied_units)  # these are the units that will return again.
+        self.rallied_units = {}  # the rallied units are used now
+
+        def f():
+            loot = attack(u, target_p)
+            self.return_units(u, loot, time)
+        return f
+
+    def return_units(self, units, loot, time):
+        if units:  # only return if there are units left
+            def f():
+                for u, amount in units.items():
+                    self.add_troops(u, amount, self.units)
+                for r, amount in loot.items():
+                    self.resources[r] += amount
+            self.return_threads.append(Process(time, f, "returning units"))
 
     async def upgrade(self, player_b, send_message):
         if not player_b:
@@ -135,9 +177,33 @@ class Player(object):
             if isinstance(b, building):
                 return b
 
-    def rally_troops(self, unit, amount, send_message):
+    async def rally_troops(self, player_u, amount, send_message):
         """cally some of your troops to send out for an attack"""
-        pass
+        if player_u in self.units and self.units[player_u] >= amount:
+            # move units
+            self.subtract_troops(player_u, amount, self.units)
+            self.add_troops(player_u, amount, self.rallied_units)
+            await send_message("you rallied %i %s%s" % (amount, player_u.name, "" if amount == 1 else "s"))
+        else:
+            await send_message("you don't have enough %ss" % player_u.name)
+
+    def clear_rallied(self):
+        for u, amount in self.rallied_units.items():
+            self.add_troops(u, amount, self.units)
+        self.rallied_units = {}
+
+    def add_troops(self, player_u, amount, target):
+        if not type(amount) == int:
+            print("ERROR PLAYER add_troops: amount not integer")
+        if player_u in target:
+            target[player_u] += amount
+        else:
+            target[player_u] = amount
+        if target[player_u] <= 0:  # you can't have 0 or negative troops
+            del target[player_u]
+
+    def subtract_troops(self, player_u, amount, target=None):
+        self.add_troops(player_u, -amount, target)
 
     # properties ====================================================
 

@@ -1,8 +1,33 @@
 import random
+from copy import deepcopy
+
+
+def attack(attack_troops, player_d):
+    print("arrack against %s" % player_d.owner)
+    # combine rallied units with defensive units
+    player_d.clear_rallied()
+
+    print("attacking: " + str(attack_troops))
+    print("defending: " + str(player_d.units))
+
+    attack_troops, player_d.units = simulate_fight(attack_troops, player_d.units)
+    print("after:")
+    print("attackers" + str(attack_troops))
+    print("defenders" + str(player_d.units))
+
+    if attack_troops:  # the player one. (take the other persons resources)
+        loot = deepcopy(player_d.resources)
+        print("loot:")
+        print(loot)
+        for k, v in player_d.resources.items():
+            player_d.resources[k] = 0
+        return loot
 
 
 def simulate_fight(p1, p2):
     """simulates a fight between party 1 and party 2"""
+    if not p2:  # if the defensive has no units
+        return p1, p2
     # calculate the total damage for both parties
     dmg1 = sum([adjusted_damage(u, amount, p2) for u, amount in p1.items()])
     dmg2 = sum([adjusted_damage(u, amount, p1) for u, amount in p2.items()])

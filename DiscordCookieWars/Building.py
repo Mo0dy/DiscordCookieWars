@@ -1,6 +1,7 @@
 from Process import Process
 from Unit import units_table
 import inspect
+from copy import deepcopy
 
 
 class Building(object):
@@ -102,10 +103,10 @@ class Pipeline(RGenerator):
         },
     }
     upgrade_times = {
-        2: 8,
+        2: 4,
         3: 8,
-        4: 8,
-        5: 8,
+        4: 16,
+        5: 32,
     }
 
 
@@ -143,10 +144,10 @@ class Mine(RGenerator):
         },
     }
     upgrade_times = {
-        2: 8,
+        2: 4,
         3: 8,
-        4: 8,
-        5: 8,
+        4: 16,
+        5: 32,
     }
 
 
@@ -163,7 +164,7 @@ class Farm(RGenerator):
         "Mine": 1,
         "Pipeline": 1,
     }
-    build_time = 8
+    build_time = 3
 
     upgrade_requirements = {
         2: {
@@ -194,10 +195,10 @@ class Farm(RGenerator):
         },
     }
     upgrade_times = {
-        2: 8,
+        2: 4,
         3: 8,
-        4: 8,
-        5: 8,
+        4: 16,
+        5: 32,
     }
 
 
@@ -214,7 +215,7 @@ class Factory(RGenerator):
         "Mine": 1,
         "Pipeline": 1,
     }
-    build_time = 8
+    build_time = 3
 
     upgrade_requirements = {
         2: {
@@ -245,10 +246,10 @@ class Factory(RGenerator):
         },
     }
     upgrade_times = {
-        2: 8,
+        2: 4,
         3: 8,
-        4: 8,
-        5: 8,
+        4: 16,
+        5: 32,
     }
 
 
@@ -265,6 +266,7 @@ class Military(Building):
         super(Military, self).update(player)
         # update build_threads and remove finished ones
         self.build_threads = list(filter(lambda x: x.update(), self.build_threads))
+        print(self.build_threads)
 
     def clear_build_prep(self):
         self.build_prep = {}
@@ -281,8 +283,9 @@ class Military(Building):
 
     def add_prep_to_player_func(self, player):
         """returns a function that will add a dictionary of units to the players units"""
+        cpy_dict = deepcopy(self.build_prep)
         def f():
-            for unit, amount in self.build_prep.items():
+            for unit, amount in cpy_dict.items():
                 if unit in player.units:
                     player.units[unit] += amount
                 else:
@@ -331,7 +334,7 @@ class CityWall(Building):
         "gingerbread": 100,
         "candy": 10,
     }
-    build_time = 8
+    build_time = 20
 
     upgrade_requirements = {
         2: {
@@ -346,7 +349,7 @@ class CityWall(Building):
         },
     }
     upgrade_times = {
-        2: 8,
+        2: 40,
     }
 
 
@@ -377,7 +380,7 @@ class Barracks(Military):
         }
     }
     upgrade_times = {
-        2: 8,
+        2: 16,
     }
 
 
@@ -393,7 +396,7 @@ class Archery(Military):
         "gingerbread": 150,
         "cottoncandy": 50,
     }
-    build_time = 8
+    build_time = 20
 
 
 class Stables(Military):
@@ -408,7 +411,7 @@ class Stables(Military):
         "gingerbread": 700,
         "cottoncandy": 1000,
     }
-    build_time = 8
+    build_time = 30
 
 
 class Workshop(Military):
@@ -423,7 +426,7 @@ class Workshop(Military):
         "gingerbread": 800,
         "candy": 1200,
     }
-    build_time = 8
+    build_time = 50
 
 
 # Other Buildings ========================================================
@@ -470,9 +473,9 @@ class Manor(Building):
         }
     }
     upgrade_times = {
-        2: 8,
-        3: 8,
-        4: 8,
+        2: 12,
+        3: 24,
+        4: 48,
     }
 
     def upgrade(self, player):
