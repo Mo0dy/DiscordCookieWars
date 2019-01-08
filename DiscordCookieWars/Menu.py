@@ -53,7 +53,7 @@ class Menu(object):
         for e, m_point in self.current_menu.items():
             lines.append("{:<4}: {:<20}".format(e, m_point.name))
         lines.append("=======================================")
-        message = await self.client.send_message(self.channel, "menu\n%s" % "\n".join(lines))
+        message = await self.client.send_message(self.channel, "**%ss** menu\n%s" % (self.author.name, "\n".join(lines)))
 
         for e in self.current_menu.keys():
             await self.client.add_reaction(message, e)

@@ -1,5 +1,5 @@
 from Process import Process
-from Unit import units_table
+from Unit import units_table, get_units_str
 import inspect
 from copy import deepcopy
 
@@ -26,6 +26,7 @@ class Building(object):
             print("ERROR CAN'T UPDATE ANYMORE")
 
     def upgrade(self, player):
+        print("%s upgraded %s" % (player.owner, self.command_name))
         self.level += 1
 
     # gets called every unit time
@@ -164,7 +165,7 @@ class Farm(RGenerator):
         "Mine": 1,
         "Pipeline": 1,
     }
-    build_time = 3
+    build_time = 1
 
     upgrade_requirements = {
         2: {
@@ -215,7 +216,7 @@ class Factory(RGenerator):
         "Mine": 1,
         "Pipeline": 1,
     }
-    build_time = 3
+    build_time = 1
 
     upgrade_requirements = {
         2: {
@@ -266,30 +267,37 @@ class Military(Building):
         super(Military, self).update(player)
         # update build_threads and remove finished ones
         self.build_threads = list(filter(lambda x: x.update(), self.build_threads))
-        print(self.build_threads)
+        if self.build_threads:
+            print("threads \n%s" "\n".join([str(t) for t in self.build_threads]))
 
     def clear_build_prep(self):
         self.build_prep = {}
 
-    async def build_units(self, player, send_message):
+    async def build_units(self, player, send_message, unit_time):
         """starts the currently prepared build thread"""
+        if not self.build_prep:
+            await send_message("nothing prepped")
+            return
         cost = self.total_cost()
         # enough free threads and the player has the resources
         if len(self.build_threads) < self.workforce and await player.can_build(cost, None, send_message):
             player.use_resources(cost)
-            self.build_threads.append(Process(self.total_time(), self.add_prep_to_player_func(player), self.name))
-            return True
-        return False
+            p = Process(self.total_time(), self.add_prep_to_player_func(player), self.name + " building units")
+            self.build_threads.append(p)
+            await send_message("you started building:\n===================\n%s\n%s\n===================" % (get_units_str(self.build_prep), p.pretty_str(unit_time)))
+            self.clear_build_prep()
 
     def add_prep_to_player_func(self, player):
         """returns a function that will add a dictionary of units to the players units"""
         cpy_dict = deepcopy(self.build_prep)
+
         def f():
             for unit, amount in cpy_dict.items():
                 if unit in player.units:
                     player.units[unit] += amount
                 else:
                     player.units[unit] = amount
+            player.messages.append("You finished building:\n%s" % get_units_str(cpy_dict))
         return f
 
     def prep_units(self, unit, amount):
@@ -313,7 +321,6 @@ class Military(Building):
         """returns the total cost of the currently prepared units"""
         cost = {}
         for unit, amount in self.build_prep.items():
-            print(unit, unit.level)
             for resource, r_amount in unit.price.items():
                 if resource in cost.keys():
                     cost[resource] += amount * r_amount
@@ -351,6 +358,16 @@ class CityWall(Building):
     upgrade_times = {
         2: 40,
     }
+
+    # the health the city wall has is important for the damage calculation (it gets added to the total unit health)
+    hp_list = {
+        1: 100,
+        2: 400,
+    }
+
+    @property
+    def hp(self):
+        return self.hp_list[self.level]
 
 
 class Barracks(Military):
@@ -460,6 +477,7 @@ class Manor(Building):
             "cottoncandy": 500,
         },
     }
+
     upgrade_requirements = {
         2: {
             "Mine": 1,
@@ -473,7 +491,7 @@ class Manor(Building):
         }
     }
     upgrade_times = {
-        2: 12,
+        2: 8,
         3: 24,
         4: 48,
     }
@@ -482,6 +500,10 @@ class Manor(Building):
         super(Manor, self).upgrade(player)
         if self.level in self.workforce_per_level.keys():
             player.workforce = self.workforce_per_level[self.level]
+            player.messages.append("You now have a workforce of %i in your %s %s" % (player.workforce, self.name, self.emoji))
+        if self.level == 2:
+            player.protection = False
+            player.messages.append("%s lvl2 You are no longer protected" % self.emoji)
 
 
 class Storage(Building):

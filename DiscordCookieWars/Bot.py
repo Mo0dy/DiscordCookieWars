@@ -6,6 +6,7 @@ import Unit
 from Building import buildings_table
 from Unit import units_per_building, units_table
 import discord
+from Utility import get_time_str, get_resource_str
 import Menu
 
 
@@ -15,9 +16,10 @@ savepath = os.path.join("Saves", "players")
 
 class Bot(object):
     """The main bot that handles all the messages and holds all the information"""
-    def __init__(self, client, server, unit_time_f):
-        self.unit_time_f = unit_time_f  # a function to get unit_time
-        self.command_prefix = "?"
+    unit_time_f = None
+
+    def __init__(self, client, server):
+        self.command_prefix = "."
         self.client = client  # the client that can be used to interact with discord
 
         # the player classes. the key is the id of the user owning the player
@@ -27,11 +29,21 @@ class Bot(object):
         self.load_players()
         self.attack_time = 20  # units of time per attack
 
+    async def fast_update(self):
+        """an update function that gets called more often and is used to handle messages"""
+        for user_id, p in self.players.items():
+            if p.messages:
+                # retrieve user:
+                user = await self.client.get_user_info(user_id)
+                for m in p.messages:
+                    await self.send_message(user, m)
+            p.messages = []
+
     async def update(self):
         """gets called about twice a minute and is used for timed events"""
 
         # call the update method of all players
-        print("\nUPDATE BOT %s ========================" % self.server)
+        print("\nUPDATE BOT %s ====================================================" % self.server)
         for p in self.players.values():
             print("Player: %s ===========" % p.owner)
             await p.update()
@@ -45,10 +57,22 @@ class Bot(object):
     async def join(self, author, channel):
         """a new user joins the game"""
         if author.id not in self.players.keys():
-            self.players[author.id] = Player.Player(author.id)  # add a new player to the list of players
+            self.players[author.id] = Player.Player(author.id, author.name)  # add a new player to the list of players
             await self.send_message(channel, "%s you joined the cookie wars! type %shelp to get started" % (self.get_mention(author), self.command_prefix))
         else:
             await self.send_message(channel, "you already joined the cookie wars. type %shelp to get started" % self.command_prefix)
+
+    async def leave(self, author, channel):
+        if author.id not in self.players.keys():
+            await self.send_message(channel, "you are not even playing yet")
+        else:
+            await self.send_message(channel, 'are you sure you want to leave all your progress will be lost? if so type: "yes"')
+            m = await self.client.wait_for_message(timeout=10, author=author, channel=channel)
+            if m and m.content == "yes":
+                del self.players[author.id]
+                await self.send_message(channel, "you left the game.")
+            else:
+                await self.send_message(channel, "leave aborted.")
 
     async def start_menu(self, author, channel):
         """starts a menu process"""
@@ -59,7 +83,7 @@ class Bot(object):
     async def print_help(self, channel):
         help_str = """Your goal is to upgrade your hometown and raid your foes for resources (and pleasure).
         
-        You can upgrade your building to produce more resources, better units and unlock new buildpaths.
+        You can upgrade your building to produce more resources, better units and unlock new build paths.
         
         There are four basic resources:
         > gingerbread
@@ -81,12 +105,15 @@ class Bot(object):
         1. Navigate to the rally troops menu (main_menu -> military district -> units.
         2. Select all the troops you want to rally. There are collected at a separate place.
         3. Send all rallied units for an attack.
+        
+        type: "?menu" to get started.
         """
         await self.send_message(channel, help_str)
 
     async def print_town(self, author, channel):
         """prints information about the town"""
-        await self.send_message(channel, 'buildings: \n%s\n' % '\n'.join(["{:<5}{:<20}{}".format(b.emoji, b.name, b.level) for b in self.get_player(author).buildings]))
+        lines = '\n'.join(["{:<5}{:<47}{}".format(b.emoji, b.name, b.level) for b in self.get_player(author).buildings])
+        await self.send_message(channel, 'buildings: \n%s\n%s\n' % ("{:<45}{}".format("building", "level"), lines))
 
     async def print_resources(self, author, channel):
         """prints the amount of resources the player has"""
@@ -120,7 +147,7 @@ class Bot(object):
     async def print_threads(self, author, channel):
         """prints the current build threads"""
         player = self.get_player(author)
-        await self.send_message(channel, "currently building:\n %s" % "\n".join([self.get_process_str(t) for t in player.build_threads]))
+        await self.send_message(channel, "currently building:\n %s" % "\n".join([t.pretty_str(self.unit_time) for t in player.build_threads]))
 
     async def print_units(self, author, channel):
         """prints all units a player has"""
@@ -128,7 +155,7 @@ class Bot(object):
         if not player.units:
             await self.send_message(channel, "you have no units")
             return
-        units_list = "\n".join(["{:<10}({:<4}):  lvl {:<10}x{:<2}".format(u.name, u.emoji, u.level, amount) for u, amount in player.units.items()])
+        units_list = Unit.get_units_str(player.units)
         await self.send_message(channel, "your units:\n================\n%s\n================" % units_list)
 
     async def print_requirements(self, channel, player_b):
@@ -145,7 +172,7 @@ class Bot(object):
 
     async def print_building_threads(self, channel, player_b):
         """prints the threads of a specific building"""
-        await self.send_message(channel, "currently building:\n %s" % "\n".join([self.get_process_str(t) for t in player_b.build_threads]))
+        await self.send_message(channel, "currently building:\n %s" % "\n".join([t.pretty_str(self.unit_time) for t in player_b.build_threads]))
 
     async def print_building_prepared(self, channel, player_b):
         """prints the prepared units in a building"""
@@ -157,16 +184,11 @@ class Bot(object):
         units_list = "\n".join(["{:<10}({:<4}):  lvl {:<10}x{:<2}".format(u.name, u.emoji, u.level, amount) for u, amount in player_b.build_prep.items()])
         cost_list = "\n".join(["{:<10} x{:<4}".format(resource, amount) for resource, amount in player_b.total_cost().items()])
 
-        await self.send_message(channel, "%s prepped units:\n=====================\n%s\n=========\ncost:\n%s\n=====================" % (player_b.name, units_list, cost_list))
+        await self.send_message(channel, "%s prepped units:\n=====================\n%s\n=========\ncost:\n%s\nThis will take %s\n=====================" % (player_b.name, units_list, cost_list, get_time_str(player_b.total_time())))
 
     async def start_building_prepped(self, author, channel, player_b):
         """starts the prepped build of a military building if the user has the resources"""
-        started_build = await player_b.build_units(self.get_player(author), self.get_message_func(channel))
-        if not started_build:
-            await self.send_message(channel, "you don't have enough resources")
-        else:
-            await self.send_message(channel, "you started the prepped build")
-            player_b.clear_build_prep()
+        await player_b.build_units(self.get_player(author), self.get_message_func(channel), Bot.unit_time_f())
 
     async def build(self, author, channel, building):
         """build a new building"""
@@ -189,7 +211,7 @@ class Bot(object):
 
         # add the unit to the building prep
         building.prep_units(unit, amount)
-        await self.send_message(channel, "your units have been added to the prep queue")
+        await self.send_message(channel, "your units have been added to the prep queue.\nYour currently prepped units will take: %s" % get_time_str(building.total_time()))
 
     async def clear_prepped_units(self, channel, player_b):
         player_b.clear_build_prep()
@@ -225,53 +247,26 @@ class Bot(object):
             target = answer.mentions[0]
         if target.id not in self.players:
             await self.send_message(channel, "target did not join the game yet.")
-        attack_p = self.get_player(author)
+            return
         def_p = self.get_player(target)
-        await attack_p.attack(def_p, "**%s**" % target.name, self.get_message_func(channel), self.attack_time)
+        if def_p.protection:
+            await self.send_message(channel, "target is still protected")
+            return
+        attack_p = self.get_player(author)
+        if attack_p.protection:
+            attack_p.protection = False
+            await self.send_message(channel, "you made an aggressive move and are no longer protected")
+        await attack_p.attack(def_p, self.get_message_func(channel), self.attack_time)
 
     async def print_attacks(self, author, channel):
         player = self.get_player(author)
-        attacks_list = "\n".join([self.get_process_str(t) for t in player.attack_threads])
-        returns_list = "\n".join([self.get_process_str(t) for t in player.return_threads])
+        attacks_list = "\n".join([t.pretty_str(self.unit_time) for t in player.attack_threads])
+        returns_list = "\n".join([t.pretty_str(self.unit_time) for t in player.return_threads])
         await self.send_message(channel, "currently attacking:\n %s\ncurrently returning:\n%s" % (attacks_list, returns_list))
 
     # utility functions ===========================================================
-    @staticmethod
-    def get_resource_str(resources, detail=False):
-        emojilist = {
-            "gingerbread": "🍫",
-            "cottoncandy": "☁",
-            "candy": "🍭",
-            "chocolate": "🍩",
-        }
-        trans = {
-            "gingerbread": "Gingerbread",
-            "cottoncandy": "Cotton Candy",
-            "candy": "Candy",
-            "chocolate": "Chocolate",
-        }
-        if detail:
-            return "\n".join(["{} ({}): {}".format(emojilist[r], trans[r], amount) for r, amount in resources.items()])
-        return ", ".join(["{}: {}".format(emojilist[r], amount) for r, amount in resources.items()])
-
-    def get_process_str(self, process):
-        return "{}: {} left and {}% done".format(process.name, self.get_time_str(process.time), round((process.total_time - process.time)/ process.total_time * 100))
-
     def get_time_str(self, time_units):
-        """returns a time in real world units rounded appropriately"""
-        t = time_units * self.unit_time
-        t_units = [
-            ("day", 60 * 60 * 24),
-            ("hour", 60 * 60),
-            ("minute", 60),
-            ("second", 1),
-        ]
-        for t_str, t_amount in t_units:
-            if t < t_amount:
-                continue
-            time_str = "%.1f" % (t / t_amount)
-            return "{} {}{}".format(time_str if int(time_str[-1]) else time_str[:-2], t_str, "" if time_str == "1.0" else "s")
-        return "0s"
+        return get_time_str(time_units * self.unit_time)
 
     async def ask_amount(self, author, channel, message="How many do you want?"):
         """asks the author for a positive integer value"""
@@ -345,7 +340,7 @@ class Bot(object):
         if not save_objs:
             self.players = {}
             return
-        self.players = {key: value.restore(Player.Player("")) for key, value in save_objs.items()}
+        self.players = {key: value.restore(Player.Player("", "")) for key, value in save_objs.items()}
 
     def save_players(self):
         """save the player information to file"""
@@ -368,9 +363,9 @@ class Bot(object):
         main_menu = {
             "🍭": Menu.Menupoint("Candy Manor", self.candy_manor_menu, submenu=True),
             "⚔": Menu.Menupoint("Military District", self.military_menu, submenu=True),
-            "❓": Menu.Menupoint("Help", menu.build_f(self.print_help, [menu.channel]))
+            "❓": Menu.Menupoint("Help", menu.build_f(self.print_help, [menu.channel])),
         }
-        menu.header = self.get_resource_str(self.get_player(menu.author).resources, detail=True)
+        menu.header = get_resource_str(self.get_player(menu.author).resources, detail=True)
         menu.change_menu(main_menu)
 
     def candy_manor_menu(self, menu):
@@ -382,7 +377,7 @@ class Bot(object):
             "🗺": Menu.Menupoint("town overview", menu.build_f(self.print_town, (menu.author, menu.channel))),
             "⬅": Menu.Menupoint("return", self.main_menu, submenu=True),
         }
-        menu.header = self.get_resource_str(self.get_player(menu.author).resources)
+        menu.header = get_resource_str(self.get_player(menu.author).resources)
         menu.change_menu(m)
 
     def resource_menu(self, menu):
@@ -390,7 +385,7 @@ class Bot(object):
             "🍪": Menu.Menupoint("resources", menu.build_f(self.print_resources, (menu.author, menu.channel))),
             "⬅": Menu.Menupoint("return", self.main_menu, submenu=True),
         }
-        menu.header = self.get_resource_str(self.get_player(menu.author).resources)
+        menu.header = get_resource_str(self.get_player(menu.author).resources)
         menu.change_menu(m)
 
     def military_menu(self, menu):
@@ -407,25 +402,25 @@ class Bot(object):
         if player.attack_threads or player.return_threads:
             military_menu["🔜"] = Menu.Menupoint("current attacks", menu.build_f(self.print_attacks, (menu.author, menu.channel)))
         military_menu["⬅"] = Menu.Menupoint("return", self.main_menu, submenu=True)
-        menu.header = self.get_resource_str(self.get_player(menu.author).resources, detail=True)
+        menu.header = get_resource_str(self.get_player(menu.author).resources, detail=True)
         menu.change_menu(military_menu)
 
     def build_menu(self, menu):
         build_menu = {}
         for b in self.get_buildable(menu.author):
             f = menu.build_f(self.build, (menu.author, menu.channel, b))
-            build_menu[b.emoji] = Menu.Menupoint(b.name + "\t cost:" + self.get_resource_str(b.build_cost), menu.get_recall_wrapper(f, self.build_menu))
+            build_menu[b.emoji] = Menu.Menupoint(b.name + "\t cost:{}, time: {}".format(get_resource_str(b.build_cost), self.get_time_str(b.build_time)), menu.get_recall_wrapper(f, self.build_menu))
         build_menu["⬅"] = Menu.Menupoint("return", self.candy_manor_menu, submenu=True)
-        menu.header = self.get_resource_str(self.get_player(menu.author).resources, detail=True)
+        menu.header = get_resource_str(self.get_player(menu.author).resources, detail=True)
         menu.change_menu(build_menu)
 
     def upgrade_menu(self, menu):
         upgrade_menu = {}
         for b in self.get_upgradable(menu.author):
             f = menu.build_f(self.upgrade, (menu.author, menu.channel, b))
-            upgrade_menu[b.emoji] = Menu.Menupoint(b.name + "\t cost:" + self.get_resource_str(b.next_price()), menu.get_recall_wrapper(f, self.upgrade_menu))
+            upgrade_menu[b.emoji] = Menu.Menupoint(b.name + "\t cost:{:<50}, time:{}".format(get_resource_str(b.next_price()), self.get_time_str(b.next_time())), menu.get_recall_wrapper(f, self.upgrade_menu))
         upgrade_menu["⬅"] = Menu.Menupoint("return", self.candy_manor_menu, submenu=True)
-        menu.header = self.get_resource_str(self.get_player(menu.author).resources, detail=True)
+        menu.header = get_resource_str(self.get_player(menu.author).resources, detail=True)
         menu.change_menu(upgrade_menu)
 
     def military_building_menu(self, menu, player_b):
@@ -433,14 +428,14 @@ class Bot(object):
         building_menu = {}
         for u in self.get_buildable_units(menu.author, player_b):
             f = menu.build_f(self.prep_units, (menu.author, menu.channel, player_b, u))
-            building_menu[u.emoji] = Menu.Menupoint(u.name + "\tcost: " + self.get_resource_str(u.price), menu.get_recall_wrapper(f, self.get_building_menu(player_b)))
+            building_menu[u.emoji] = Menu.Menupoint(u.name + "\tcost: " + get_resource_str(u.price), menu.get_recall_wrapper(f, self.get_building_menu(player_b)))
         building_menu["🏃"] = Menu.Menupoint("prepped", menu.build_f(self.print_building_prepared, (menu.channel, player_b)))
         building_menu["👍"] = Menu.Menupoint("start training", menu.get_recall_wrapper(menu.build_f(self.start_building_prepped, (menu.author, menu.channel, player_b)), self.get_building_menu(player_b)))
         building_menu["👷"] = Menu.Menupoint("currently building", menu.build_f(self.print_building_threads, (menu.channel, player_b)))
         if player_b.build_prep:
             building_menu["🛑"] = Menu.Menupoint("clear prepped solders", menu.get_recall_wrapper(lambda: player_b.clear_build_prep(), self.get_building_menu(player_b), async=False))
         building_menu["⬅"] = Menu.Menupoint("return", self.military_menu, submenu=True)
-        menu.header = self.get_resource_str(self.get_player(menu.author).resources, detail=True)
+        menu.header = get_resource_str(self.get_player(menu.author).resources, detail=True)
         menu.change_menu(building_menu)
 
     def rally_troops_menu(self, menu):
@@ -464,4 +459,4 @@ class Bot(object):
     # properties
     @property
     def unit_time(self):
-        return self.unit_time_f()
+        return Bot.unit_time_f()

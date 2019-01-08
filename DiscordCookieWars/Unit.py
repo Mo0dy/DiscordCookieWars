@@ -15,6 +15,7 @@ class Unit(object):
     speed_list = {}  # the speed per level
     time_list = {}  # the time it takes to build the unit per level
     requirements_list = {}  # the requirements list. a unit needs requirements for EVERY level
+    carrying_capacity_list = {}
 
     def __init__(self, level=1):
         if level in self.price_list.keys():  # check that this unit has the level
@@ -29,6 +30,14 @@ class Unit(object):
         else:
             # find the highest level below the current level
             return self.last_level_items(self.damage_list)
+
+    @property
+    def carrying_capacity(self):
+        if self.level in self.damage_list:
+            return self.carrying_capacity_list[self.level]
+        else:
+            # find the highest level below the current level
+            return self.last_level_items(self.carrying_capacity_list)
 
     @property
     def price(self):
@@ -110,6 +119,10 @@ class Soldier(Unit):
     speed_list = {
         1: 6,
     }
+    carrying_capacity_list = {
+        1: 10,
+        2: 50,
+    }
     requirements_list = {
         1: {
             "barracks": 1,
@@ -146,6 +159,10 @@ class Archer(Unit):
     speed_list = {
         1: 5,
     }
+    carrying_capacity_list = {
+        1: 5,
+        2: 25,
+    }
     requirements_list = {
         1: {
             "archery": 1
@@ -177,6 +194,9 @@ class Cavalry(Unit):
     }
     speed_list = {
         1: 25,
+    }
+    carrying_capacity_list = {
+        1: 75,
     }
     requirements_list = {
         1: {
@@ -212,6 +232,9 @@ class Trebuchet(Unit):
     speed_list = {
         1: 1,
     }
+    carrying_capacity_list = {
+        1: 200,
+    }
     requirements_list = {
         1: {
             "workshop": 1
@@ -220,6 +243,11 @@ class Trebuchet(Unit):
     time_list = {
         1: 40,
     }
+
+
+def get_units_str(unit_dict):
+    """returns a nice formated string that displays what units you have what amount of in this dictionary"""
+    return "\n".join(["{:<10}({:<4}):  lvl {:<10}x{:<2}".format(u.name, u.emoji, u.level, amount) for u, amount in unit_dict.items()])
 
 
 # a table where the command name is key and the unit value

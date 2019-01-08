@@ -1,5 +1,7 @@
 import random
 from copy import deepcopy
+from math import ceil
+import Unit
 
 
 def attack(attack_troops, player_d):
@@ -10,13 +12,25 @@ def attack(attack_troops, player_d):
     print("attacking: " + str(attack_troops))
     print("defending: " + str(player_d.units))
 
-    attack_troops, player_d.units = simulate_fight(attack_troops, player_d.units)
+    attack_troops, player_d.units = simulate_fight(attack_troops, player_d.units, player_d.city_wall_health)
     print("after:")
     print("attackers" + str(attack_troops))
     print("defenders" + str(player_d.units))
 
     if attack_troops:  # the player one. (take the other persons resources)
-        loot = deepcopy(player_d.resources)
+        # calculate the loot the player will take
+        capacity = sum([u.carrying_capacity * a for u, a in attack_troops.items()])
+        per_resource = ceil(capacity // 4)  # at leas one
+
+        overflow = 0  # the additional amount the use can carry of a resource if he can't carry the previous one
+        loot = {}
+        for r, a in player_d.resources.items():
+            stolen = min(per_resource + overflow, a)
+            player_d.resources[r] -= stolen
+            loot[r] = stolen
+            overflow = max(0, per_resource - stolen)
+
+        # loot = deepcopy(player_d.resources)
         print("loot:")
         print(loot)
         for k, v in player_d.resources.items():
@@ -24,12 +38,20 @@ def attack(attack_troops, player_d):
         return loot
 
 
-def simulate_fight(p1, p2):
+def simulate_fight(p1, p2, city_wall_health):
     """simulates a fight between party 1 and party 2"""
     if not p2:  # if the defensive has no units
         return p1, p2
-    # calculate the total damage for both parties
-    dmg1 = sum([adjusted_damage(u, amount, p2) for u, amount in p1.items()])
+
+    # add city wall to p2_def units:
+    p2_def = deepcopy(p2)
+    cw_unit = Unit.Unit()
+    cw_unit.health_list[1] = city_wall_health
+    cw_unit.command_name = "city_wall"
+    p2_def[cw_unit] = 1
+
+    # calculate the total damage for both parties. the defender also has the city wall
+    dmg1 = sum([adjusted_damage(u, amount, p2_def) for u, amount in p1.items()])
     dmg2 = sum([adjusted_damage(u, amount, p1) for u, amount in p2.items()])
 
     # calculate the other teams hp and then compare it to the damage made
@@ -79,26 +101,11 @@ def adjusted_damage(attacker, amount, target_group):
     """does an evaluation of the potency of one type of attacker against the target group"""
     normal_damage = attacker.damage * amount
 
-    # calculate the proportion of targets the unit is strong against
+    # calculate the proportion of targets the unit is strong against. (proportion of the total health)
     # the sum of all units the attacker is strong against
-    strong_amount = sum([amount for unit, amount in target_group.items() if unit.command_name in attacker.strengths])
-    p_effective = strong_amount / sum(target_group.values())
+    strong_amount = sum([amount * unit.health for unit, amount in target_group.items() if unit.command_name in attacker.strengths])
+    p_effective = strong_amount / sum([amount * unit.health for unit, amount in target_group.items()])
     # this formula is derived by assuming all damage is done simultaneously. this means no units can die before making
     # all their potential damage. It still should be correct in most cases and more then suitable for this use case
     adj_dmg = (p_effective * (attacker.strength_damage_multiplier - 1) + 1) * normal_damage
     return adj_dmg
-
-
-if __name__ == "__main__":
-    from Unit import *
-    p1 = {
-        Archer(): 9,
-        Soldier(): 1,
-    }
-    p2 = {
-        Archer(): 1,
-        Soldier(): 9,
-    }
-    p1, p2 = simulate_fight(p1, p2)
-    print(p1, p2)
-

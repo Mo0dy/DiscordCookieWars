@@ -24,8 +24,8 @@ class CommandHandler(object):
             # a list of all commands and the functions they invoke
             commands = {
                 "menu": self.build(bot.start_menu, (author, channel)),
-                "help": self.build(bot.print_help, [channel]),
                 "town": self.build(bot.print_town, (author, channel)),
+                "leave": self.build(bot.leave, (author, channel)),
                 "resources": self.build(bot.print_resources, (author, channel)),
                 "buildable": self.build(bot.print_buildable, (author, channel)),
                 "upgradable": self.build(bot.print_upgrades, (author, channel)),
@@ -42,12 +42,14 @@ class CommandHandler(object):
             }
 
             admin_commands = {
-
+                "give_resources": self.give_resources(param, bot, channel, mentions),
             }
 
             # special cases:
             if command == "join":
                 await bot.join(author, channel)
+            elif command == "help":
+                await bot.print_help(channel)
             elif command in commands:  # general case
                 # check if user is new else print: ?join
                 if author.id not in bot.players.keys():
@@ -57,9 +59,33 @@ class CommandHandler(object):
                 await commands[command]()  # call the event
             elif command in admin_commands:
                 if message.author.server_permissions.administrator:
-                    await admin_commands[command](author, mentions, channel, com_list[1:])
+                    await admin_commands[command]()
                 else:
                     await bot.send_message(channel, "%s incorrect permissions" % bot.get_mention(author))
+
+    @staticmethod
+    def give_resources(param, bot, channel, mentions):
+        """command: <prefix>give_resources <amount> <type> <@mention>"""
+        async def f():
+            if not mentions:
+                return
+            if not param:
+                amount = 1
+            else:
+                amount = int(param[0])
+            resource = None
+            if len(param) > 1:
+                resource = param[1]
+            player = bot.get_player(mentions[0])
+            if resource:
+                if resource in player.resources:
+                    player.resources[resource] += amount
+                    await bot.client.send_message(channel, "added resources")
+            else:
+                for key in player.resources.keys():
+                    player.resources[key] += amount
+                    await bot.client.send_message(channel, "added resources")
+        return f
 
     @staticmethod
     def build(f, args, check=None):
@@ -189,7 +215,7 @@ class CommandHandler(object):
     @staticmethod
     async def check_valid_military_building_param(author, param, channel, bot):
         """checks if the parameters are generally acceptable for a command of type: ?<command> <m_building>"""
-        if await bot.ifnew(author, bot.get_message_func(channel)):
+        if author.id not in bot.players:
             return
         player = bot.get_player(author)
         if not param[0]:
