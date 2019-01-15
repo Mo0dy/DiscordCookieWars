@@ -278,11 +278,14 @@ class Military(Building):
         if not self.build_prep:
             await send_message("nothing prepped")
             return
+        if len(self.build_threads) >= self.workforce:
+            await send_message("You cannot train more then %i unit%s at once" % (self.workforce, "" if self.workforce == 1 else "s"))
+            return
         cost = self.total_cost()
         # enough free threads and the player has the resources
-        if len(self.build_threads) < self.workforce and await player.can_build(cost, None, send_message):
+        if await player.can_build(cost, None, send_message):
             player.use_resources(cost)
-            p = Process(self.total_time(), self.add_prep_to_player_func(player), self.name + " building units")
+            p = Process(self.total_time(), self.add_prep_to_player_func(player), self.name + " building units", cost=cost)
             self.build_threads.append(p)
             await send_message("you started building:\n===================\n%s\n%s\n===================" % (get_units_str(self.build_prep), p.pretty_str(unit_time)))
             self.clear_build_prep()

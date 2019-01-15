@@ -17,6 +17,7 @@ class SaveObject(object):
         self.buildings = deepcopy(player.buildings)
         self.messages = player.messages
 
+        self.resources = deepcopy(player.resources)
         # clear buildthreads to avoid error while saving
         for b in self.buildings:
             if issubclass(b.__class__, Building.Military):
@@ -26,21 +27,30 @@ class SaveObject(object):
                             self.resources[r] = min(self.resources[r] + amount, player.storage_capacity)
                 b.build_threads = []
 
-        self.resources = deepcopy(player.resources)
         # add the cost from the processes of the player to player resources
         for p in player.build_threads:
             if p.cost:
                 for r, amount in p.cost.items():
                     self.resources[r] = min(self.resources[r] + amount, player.storage_capacity)
 
-        self.units = deepcopy(player.units)
         self.protection = player.protection
+        self.units = deepcopy(player.units)
         # add rallied units as well
         for u, n in player.rallied_units.items():
             if u in self.units.keys():
                 self.units[u] += n
             else:
                 self.units[u] = n
+
+        # store units
+        # store units that are out on attack
+        for p in player.attack_threads:
+            if p.units:
+                for u, amount in p.units.items():
+                    if u in self.units:
+                        self.units[u] += amount
+                    else:
+                        self.units[u] = amount
 
     def restore(self, player):
         player.owner_name = self.owner_name
@@ -126,7 +136,10 @@ class Player(object):
         target_p.messages.append("**%s** made an aggressive move against you with these units:\n=============\n%s\n=============\nthey will need %s to arrive" % (self.owner_name, Unit.get_units_str(self.rallied_units), get_time_str(time * Player.unit_time_f())))
 
         await send_message("you send out your troops:\n====================\n%s\n====================\nagainst %s\nIt will take %s" % (Unit.get_units_str(self.rallied_units), target_p.owner_name, get_time_str(time * Player.unit_time_f())))
-        self.attack_threads.append(Process(time, self.build_attack_function(target_p, time), "attack %s" % target_p.owner_name))
+        attack_units = self.rallied_units.copy()  # self.rallied units will be reset while building the attack function and needs to be stored here
+
+        # add an attack to the attack threads. Also give information about the attacking units for recovery and information printing
+        self.attack_threads.append(Process(time, self.build_attack_function(target_p, time), "attack %s" % target_p.owner_name, units=attack_units))
 
     def build_attack_function(self, target_p, time):
         """builds the function that will be executed when the attack happens"""

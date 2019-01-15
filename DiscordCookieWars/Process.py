@@ -3,7 +3,7 @@ from Utility import get_time_str
 
 
 class Process(object):
-    def __init__(self, total_time, func, name, building=None, cost=None):
+    def __init__(self, total_time, func, name, building=None, cost=None, units=None):
         if total_time == 0:
             print("PROCESS ERROR: total time can not be 0")
         self.total_time = total_time
@@ -13,7 +13,10 @@ class Process(object):
         # if a building is being upgraded or build it gets also stored here. This allows buildings that are currently
         # being build to be excluded from future build commands
         self.building = building
-        self.cost = cost  # to save at least the cost of the processes if it gets stopped
+
+        # recovery information. this should probably be grouped somehow
+        self.cost = cost  # to save at least the cost of the processes if it gets stopped if there is any
+        self.units = units  # the units to be recovered from save
 
     def update(self):
         self.time -= 1

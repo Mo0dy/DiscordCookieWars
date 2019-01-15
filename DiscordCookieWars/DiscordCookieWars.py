@@ -3,14 +3,16 @@ import asyncio
 from Bot import Bot
 from Player import Player
 from CommandHandler import CommandHandler
-
+import time
+from aiohttp.errors import ClientOSError
+from Utility import load_custom_emojis
 
 special_command = ".cmd"
 
 
 # seconds per unit of time. The game will update with every unit and every time measurement in game will have to be in
 # multiples of this e.g. a time of 3 would mean 3 * unit_time seconds
-unit_time = 5  # 15 * 60
+unit_time = 15 * 60
 
 
 token = open('debug.token', 'r').readlines()[0].strip()  # load the bot token
@@ -34,10 +36,14 @@ Player.unit_time_f = get_unit_time
 
 def run_client():
     """launches the client"""
-    try:
-        client.run(token)
-    except ConnectionError:
-        print("here")
+    loop = asyncio.get_event_loop()
+    while True:
+        try:
+            loop.run_until_complete(client.start(token))
+        except ClientOSError as e:
+            print("Error", e)
+            print("wait until restart")
+            time.sleep(60)  # try once a minute to reconnect
 
 
 @client.event
@@ -56,6 +62,8 @@ async def on_ready():
     # create one bot per server
     for s in client.servers:
         bots[s.id] = Bot(client, s.id)
+    # load custom emojis
+    load_custom_emojis(client)
     while True:
         # starts the update loop. this will only return if there is an error
         await update_loop()  # start the update loop

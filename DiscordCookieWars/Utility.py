@@ -1,4 +1,30 @@
 unit_time = 1
+from discord.utils import get
+
+
+emojilist = {
+    "gingerbread": "🍫",
+    "cottoncandy": "☁",
+    "candy": "🍭",
+    "chocolate": "🍩",
+}
+
+
+def load_custom_emojis(client):
+    """loads the custom emojis from the client
+
+    :param client:
+    :return:
+    """
+    custom_emojis = {
+        "528210030382678037": "gingerbread",
+        "528210031183790111": "candy",
+        "528210030516764682": "cottoncandy",
+        "528210030562902036": "chocolate",
+    }
+    for e in client.get_all_emojis():
+        if e.id in custom_emojis.keys():
+            emojilist[custom_emojis[e.id]] = e
 
 
 def get_time_str(t):
@@ -18,12 +44,6 @@ def get_time_str(t):
 
 
 def get_resource_str(resources, detail=False):
-    emojilist = {
-        "gingerbread": "🍫",
-        "cottoncandy": "☁",
-        "candy": "🍭",
-        "chocolate": "🍩",
-    }
     trans = {
         "gingerbread": "Gingerbread",
         "cottoncandy": "Cotton Candy",

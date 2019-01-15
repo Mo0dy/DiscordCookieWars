@@ -19,7 +19,7 @@ class Bot(object):
     unit_time_f = None
 
     def __init__(self, client, server):
-        self.command_prefix = "."
+        self.command_prefix = "?"
         self.client = client  # the client that can be used to interact with discord
 
         # the player classes. the key is the id of the user owning the player
@@ -211,7 +211,7 @@ class Bot(object):
 
         # add the unit to the building prep
         building.prep_units(unit, amount)
-        await self.send_message(channel, "your units have been added to the prep queue.\nYour currently prepped units will take: %s" % get_time_str(building.total_time()))
+        await self.send_message(channel, "your units have been added to the prep queue.\nYour currently prepped units will take: %s" % get_time_str(building.total_time() * self.unit_time))
 
     async def clear_prepped_units(self, channel, player_b):
         player_b.clear_build_prep()
@@ -444,6 +444,7 @@ class Bot(object):
         for u, amount in player.units.items():
             m[u.emoji] = Menu.Menupoint(u.name + "(%i)\t amount: %i" % (u.level, amount),  menu.get_recall_wrapper(menu.build_f(self.rally_troops, (menu.author, menu.channel, u)), self.rally_troops_menu))
         if self.get_player(menu.author).rallied_units:
+            m["➡"] = Menu.Menupoint("start attack", menu.get_recall_wrapper(menu.build_f(self.attack, (menu.author, menu.channel)), self.rally_troops_menu))
             m["🛑"] = Menu.Menupoint("clear rallied solders", menu.get_recall_wrapper(menu.build_f(self.clear_rallied, (menu.author, menu.channel)), self.rally_troops_menu))
         m["⬅"] = Menu.Menupoint("return", self.military_menu, submenu=True)
         units_list = "\n".join(["{:<10}({:<4}):  lvl {:<10}x{:<2}".format(u.name, u.emoji, u.level, amount) for u, amount in player.rallied_units.items()])

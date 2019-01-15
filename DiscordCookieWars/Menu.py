@@ -14,7 +14,7 @@ class Menu(object):
         self.author = author
         self.client = client
         self.channel = channel
-        self.timeout = 60
+        self.timeout = 30
         self.header = None
 
         # a dictionary connecting emojis with menupoints
@@ -24,15 +24,14 @@ class Menu(object):
         m, r = await self.write_menu()
         asyncio.sleep(1)
         while True:
-            if not r:
+            if not r:  # no early reaction -> wait for reaction
                 ret_val = await self.client.wait_for_reaction(user=self.author, timeout=self.timeout, message=m)
-                if not ret_val:
-                    return
+                if not ret_val:  # timeout
+                    await self.client.delete_message(m)
+                    break
                 r, _ = ret_val
+
             await self.client.delete_message(m)
-            if not r:
-                # timeout
-                break
             # change menu according to reaction
             if r.emoji in self.current_menu.keys():
                 m_point = self.current_menu[r.emoji]
@@ -40,12 +39,14 @@ class Menu(object):
                     m_point.func(self)
                 else:
                     await m_point.func()
-
             m, r = await self.write_menu()
         return
 
     async def write_menu(self):
-        """printes the menu and returns the message"""
+        """printes the menu and returns the message
+
+        :return: message, reaction (if there has been an early reaction)
+        """
         lines = ["======================================="]
         if self.header:
             lines.append(self.header)

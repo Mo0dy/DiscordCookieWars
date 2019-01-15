@@ -1,0 +1,17 @@
+**version 0.1.3**
+
+Bugfixes:
+> no more crashes on connection loss
+> menu now closes after timeout
+> all send out units will be recovered if the bot crashes
+> The correct time for building units is now displayed
+> Added warning message when trying to start a second build thread in a military building
+> Building units costs resources when starting to build them
+> When the bot crashes the resources invested in current unit training will be restored
+
+Changes:
+> Menu timeout set to 30 seconds
+
+New Features:
+> Send unit menu point in rally units submenu
+> Added custom resource emojis
